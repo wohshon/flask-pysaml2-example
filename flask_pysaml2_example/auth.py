@@ -25,9 +25,13 @@ def saml_client_for(idp_name):
     Given the name of an IdP, return a configuation.
     The configuration is a hash for use by saml2.config.Config
     """
-
+    print('-----------------------------------------')
+    print('client_for')
+    print('-----------------------------------------')    
+    print('IN saml_client_for : %s', idp_name)
     if idp_name not in current_app.config['SAML_IDP_SETTINGS']:
         raise Exception(f'Settings for IDP "{idp_name}" not found on SAML_IDP_SETTINGS.')
+    
     
     acs_url = url_for(
         'auth.saml_sso',
@@ -39,14 +43,18 @@ def saml_client_for(idp_name):
         idp_name=idp_name,
         _external=True,
         _scheme='https')
-
+    print('IN saml_client_for acs_url : %s', acs_url)
+    print('IN saml_client_for https_acs_url : %s', https_acs_url)
+    
     # SAML metadata changes very rarely. On a production system,
     # this data should be cached as approprate for your production system.
     rv = requests.get(current_app.config['SAML_IDP_SETTINGS'][idp_name]['metadata_url'])
+    print('IN saml_client_for rv text : %s', rv.text)
 
     current_app.logger.debug('rv.rext: %s', rv.text)
 
-    entityid = current_app.config['SAML_IDP_SETTINGS'][idp_name].get('entityid', acs_url)
+    entityid = current_app.config['SAML_IDP_SETTINGS'][idp_name].get('entityid', https_acs_url)
+    print('IN saml_client_for entity : %s', entityid)
 
     settings = {
         'entityid': entityid,
@@ -57,8 +65,8 @@ def saml_client_for(idp_name):
             'sp': {
                 'endpoints': {
                     'assertion_consumer_service': [
-                        (acs_url, BINDING_HTTP_REDIRECT),
-                        (acs_url, BINDING_HTTP_POST),
+                        # (acs_url, BINDING_HTTP_REDIRECT),
+                        # (acs_url, BINDING_HTTP_POST),
                         (https_acs_url, BINDING_HTTP_REDIRECT),
                         (https_acs_url, BINDING_HTTP_POST)
                     ],
@@ -87,9 +95,14 @@ def saml_client_for(idp_name):
     return saml2_client
 
 
-@auth_blueprint.route("/saml/sso/<idp_name>", methods=['POST'])
+@auth_blueprint.route("/saml/sso/<idp_name>", methods=['GET','POST'])
 def saml_sso(idp_name):
     try:
+        print('-----------------------------------------')
+        print('saml/sso/saml2')
+        print('-----------------------------------------')
+        print('IN saml_sso: %s', idp_name)
+
         saml_client = saml_client_for(idp_name)
 
         current_app.logger.debug('request.form: %s', request.form)
@@ -98,48 +111,22 @@ def saml_sso(idp_name):
             request.form['SAMLResponse'],
             BINDING_HTTP_POST
         )
+        print('IN saml_sso authn_response: %s', authn_response)
 
+        print(dir(authn_response))
         current_app.logger.info('authn_response: %s', authn_response)
-
-        authn_response.get_identity()
-        
+        print('get identity')
+        print(authn_response.get_identity())
         subject = authn_response.get_subject()
-
-        current_app.logger.info('subject: %s', subject)
-
         user_id = subject.text
 
-        # This is what as known as "Just In Time (JIT) provisioning".
-        # What that means is that, if a user in a SAML assertion
-        # isn't in the user store, we create that user first, then log them in
+        print('SUBJECT')
+        print(subject)
+        print(user_id)
 
-        user = load_user(user_id)
-        if user is None:
-            db_session = db.session()
-            user = User(
-                email=user_id,
+        redirect_url=url_for('authenticated',user_id=user_id)
 
-                # These user attributes are supplied by the IdP.
-                first_name=authn_response.ava['FirstName'][0],
-                last_name=authn_response.ava['LastName'][0]
-            )
-            db_session.add(user)
-            db_session.commit()
-        
-        session['saml_attributes'] = authn_response.ava
-
-        login_user(user)
-
-        redirect_url = url_for('user')
-
-        # NOTE:
-        #   On a production system, the RelayState MUST be checked
-        #   to make sure it doesn't contain dangerous URLs!
-        if request.form.get('RelayState'):
-            redirect_url = request.form['RelayState']
-
-        current_app.logger.info('redirect_url: %s', authn_response)
-
+        print('IN saml_sso '+redirect_url)
         return redirect(redirect_url)
     except Exception as e:
         current_app.logger.exception('Exception raised during SAML SSO login')
@@ -147,8 +134,12 @@ def saml_sso(idp_name):
         abort(401)
 
 
-@auth_blueprint.route("/saml/login/<idp_name>")
+@auth_blueprint.route("/saml/login/<idp_name>", methods=['GET'])
 def saml_login(idp_name):
+    print('-----------------------------------------')
+    print('saml/login/saml2')
+    print('-----------------------------------------')
+
     saml_client = saml_client_for(idp_name)
     reqid, info = saml_client.prepare_for_authenticate()
 
@@ -161,7 +152,10 @@ def saml_login(idp_name):
     _, redirect_url = next(filter(lambda k_v: k_v[0] == 'Location', info['headers']))
 
     current_app.logger.info('redirect_url: %s', redirect_url)
-    
+    print('Redirect *********************************************')
+    print(redirect_url)
+    print('**************************************************')
+
     response = redirect(redirect_url, code=302)
     
     # NOTE:
@@ -178,7 +172,7 @@ def saml_login(idp_name):
 
 
 @auth_blueprint.route("/logout")
-@login_required
+# @login_required
 def logout():
     logout_user()
     return redirect(url_for('index'))

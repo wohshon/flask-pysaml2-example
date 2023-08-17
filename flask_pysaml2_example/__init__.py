@@ -2,10 +2,17 @@ import logging
 
 from pathlib import Path
 
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory, request
 from flask_login import LoginManager, login_required
 from flask_sqlalchemy import SQLAlchemy
-
+from flask import abort, Blueprint, current_app, redirect, request, session, url_for
+from flask_login import login_required, login_user, logout_user
+from saml2 import (
+    BINDING_HTTP_POST,
+    BINDING_HTTP_REDIRECT
+)
+from saml2.client import Saml2Client
+from saml2.config import Config as Saml2Config
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -16,7 +23,10 @@ def create_app(test_config=None):
 
     # create and configure the app
     app = Flask(__name__, instance_relative_config=True)
+    app.config["CACHE_TYPE"] = "null"
+
     app.config.from_mapping(
+
         SECRET_KEY='dev',
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SQLALCHEMY_DATABASE_URI=f'sqlite:///{Path(app.instance_path) / "flask_pysaml2_example.sql"}',
@@ -32,6 +42,10 @@ def create_app(test_config=None):
             #    'entityid': 'http://flask-pysaml2-example',
             #    'metadata_url': 'https://<dev-account>.okta.com/app/<app-id>/sso/saml/metadata'
             # },
+            'saml2': {
+                'entityid': '<redacted>', # id for SP
+                'metadata_url': '<redacted>' # IDP metadata
+            },
         }
     )
 
@@ -66,6 +80,7 @@ def create_app(test_config=None):
             idp_names=[idp_name for idp_name in app.config['SAML_IDP_SETTINGS'].keys()]
         )
 
+    # used in the original demo
     @app.route("/user")
     @login_required
     def user():
@@ -75,4 +90,19 @@ def create_app(test_config=None):
     def error_unauthorized(error):
         return render_template('unauthorized.html'), 401
 
+    # host metadata url
+    @app.route('/config/<path:path>')
+    def send_report(path):
+        return send_from_directory('config', path)
+    
+    # testing, not used
+    @app.route('/acs', methods = ['POST', 'GET'])
+    def acs():
+        print("ACS URL INVOKED")
+        samlResponse = request.form['SAMLResponse'],
+        print(samlResponse)
+
+    @app.route('/authenticated/<string:user_id>', methods = ['POST', 'GET'])
+    def authenticated(user_id):
+        return render_template('authenticated.html',user_id=user_id)
     return app

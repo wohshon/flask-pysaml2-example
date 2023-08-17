@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}PySAML2 Example{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">Current user</div>
+    <div class="card-body">
+        <dl>
+            <dt>email</dt>
+            <dd>{{ user_id }}</dd>
+        </dl> 
+    </div>
+</div>
+
+{% endblock %}

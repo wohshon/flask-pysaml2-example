@@ -10,7 +10,7 @@ ENV POETRY_VENV=/opt/poetry-venv
 
 RUN python3 -m venv $POETRY_VENV \
     && $POETRY_VENV/bin/pip install -U pip setuptools \
-    && $POETRY_VENV/bin/pip install poetry==${POETRY_VERSION}
+    && $POETRY_VENV/bin/pip install poetry==${POETRY_VERSION} && $POETRY_VENV/bin/pip install gunicorn
 
 ENV PATH="${PATH}:${POETRY_VENV}/bin"
 
@@ -20,6 +20,9 @@ COPY poetry.lock pyproject.toml ./
 RUN poetry install
 
 COPY . /app
+RUN $POETRY_VENV/bin/pip install -r requirements.txt
+
 WORKDIR /app
 
-CMD ["poetry", "run", "gunicorn", "--bind", "127.0.0.1:5000", "flask_pysaml2_example:create_app()"]
+# CMD ["poetry", "run", "gunicorn", "--bind", "127.0.0.1:5000", "flask_pysaml2_example:create_app()"]
+CMD ["poetry", "run", "gunicorn", "--bind", "0.0.0.0:8080", "flask_pysaml2_example:create_app()"]

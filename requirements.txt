@@ -1,0 +1,5 @@
+flask
+flask_login
+pysaml2
+flask_sqlalchemy
+gunicorn
